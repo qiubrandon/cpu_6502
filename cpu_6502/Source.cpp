@@ -10,7 +10,7 @@ using u32 = unsigned int;
 
 struct Mem
 {
-	static constexpr u32 MAX_MEM = 1024 * 64; // ?
+	static constexpr u32 MAX_MEM = 1024 * 64; // 64KB 
 	Byte Data[MAX_MEM]; // ?
 
 	void Initialize()
@@ -97,7 +97,8 @@ struct CPU
 	// opcodes
 	static constexpr Byte
 
-		INS_LDA_IM = 0xA9, // Load accumulator instruction
+		// Load accumulator instruction
+		INS_LDA_IM = 0xA9, 
 		INS_LDA_ZP = 0xA5,
 		INS_LDA_ZPX = 0xB5,
 		INS_LDA_AB = 0xAD,
@@ -105,6 +106,20 @@ struct CPU
 		INS_LDA_ABY = 0xB9,
 		INS_LDA_INDX = 0xA1,
 		INS_LDA_INDY = 0xB1,
+
+		// load x register
+		INS_LDX_IM = 0xA2, 
+		INS_LDX_ZP = 0xA6,
+		INS_LDX_ZPY = 0xB6,
+		INS_LDX_AB = 0xAE,
+		INS_LDX_ABY = 0xBE,
+
+		// load y register
+		INS_LDY_IM = 0xA0, 
+		INS_LDY_ZP = 0xA4,
+		INS_LDY_ZPY = 0xB4,
+		INS_LDY_AB = 0xAC,
+		INS_LDY_ABY = 0xBC,
 
 		INS_JSR_AB = 0x20, // JSR jump to subroutine
 
@@ -114,6 +129,76 @@ struct CPU
 	{
 		Z = (A == 0); // set if a=0
 		N = (N & 0b10000000) > 0;
+	}
+
+	void setLDXFlags()
+	{
+		Z = (X == 0);
+		N = (X & 0b10000000) > 0;
+	}
+
+	void setLDYFlags()
+	{
+		Z = (Y == 0);
+		N = (Y & 0b10000000) > 0;
+	}
+
+	void LoadImmediate(Byte& Reg, u32& Cycles, Mem& memo)
+	{
+		Byte val = Fetch(Cycles, memo);
+		Reg = val;
+		Cycles--;
+	}
+
+	void LoadZeroPage(Byte& Reg, u32& Cycles, Mem& memo)
+	{
+		Byte ZeroPage = Fetch(Cycles, memo);
+		Byte ReadData = Read(Cycles, ZeroPage, memo);
+		Cycles--;
+		Reg = ReadData;
+	}
+
+	void LoadZeroPageX(Byte& Reg, u32& Cycles, Mem& memo)
+	{
+		Byte ZeroPageAddress = Fetch(Cycles, memo);
+		Byte NewAddress = ZeroPageAddress + X;
+		Cycles--;
+		Reg = Read(Cycles, NewAddress, memo);
+	}
+
+	void LoadZeroPageY(Byte& Reg, u32& Cycles, Mem& memo)
+	{
+		Byte ZeroPageAddress = Fetch(Cycles, memo);
+		Byte NewAddress = ZeroPageAddress + Y;
+		Cycles--;
+		Reg = Read(Cycles, NewAddress, memo);
+	}
+
+	void LoadAbsolute(Byte& Reg, u32& Cycles, Mem& memo)
+	{
+		Byte LOW = Fetch(Cycles, memo);
+		Byte HIGH = Fetch(Cycles, memo);
+		Word Address = (HIGH << 8) | LOW;
+		Cycles--;
+		Reg = Read(Cycles, Address, memo); // 16 bit address, read from word
+	}
+
+	void LoadAbsoluteX(Byte& Reg, u32& Cycles, Mem& memo)
+	{
+		Byte LOW = Fetch(Cycles, memo);
+		Byte HIGH = Fetch(Cycles, memo);
+		Word Address = ((HIGH << 8) | LOW) + X;
+		Cycles--;
+		Reg = Read(Cycles, Address, memo); // 16 bit address, read from word
+	}
+
+	void LoadAbsoluteY(Byte& Reg, u32& Cycles, Mem& memo)
+	{
+		Byte LOW = Fetch(Cycles, memo);
+		Byte HIGH = Fetch(Cycles, memo);
+		Word Address = ((HIGH << 8) | LOW) + Y;
+		Cycles--;
+		Reg = Read(Cycles, Address, memo); // 16 bit address, read from word
 	}
 
 	void Execute(u32 Cycles, Mem& memory) // each instruction has specific cycles
@@ -127,51 +212,32 @@ struct CPU
 			/*Load Accumulator*/
 			case INS_LDA_IM:
 			{
-				Byte value = Fetch(Cycles, memory);
-				A = value;
+				LoadImmediate(A, Cycles, memory);
 				setLDAFlags();
 			} break;
 			case INS_LDA_ZP:
 			{
-				Byte ZeroPageAddress = Fetch(Cycles, memory);
-				Byte ReadData = Read(Cycles, ZeroPageAddress, memory);
-				Cycles--;
-				A = ReadData;
+				LoadZeroPage(A, Cycles, memory);
 				setLDAFlags();
 			}break;
 			case INS_LDA_ZPX:
 			{
-				Byte ZeroPageAddress = Fetch(Cycles, memory);
-				Byte NewAddress = ZeroPageAddress + X;
-				Cycles--;
-				A = Read(Cycles, NewAddress, memory);
+				LoadZeroPageX(A, Cycles, memory);
 				setLDAFlags();
 			} break;
 			case INS_LDA_AB: // low byte then high byte, following instruction
 			{
-				Byte LOW = Fetch(Cycles, memory);
-				Byte HIGH = Fetch(Cycles, memory);
-				Word Address = (HIGH << 8) | LOW;
-				Cycles--;
-				A = Read(Cycles, Address, memory); // 16 bit address, read from word
+				LoadAbsolute(A, Cycles, memory);
 				setLDAFlags();
 			}break;
 			case INS_LDA_ABX:
 			{
-				Byte LOW = Fetch(Cycles, memory);
-				Byte HIGH = Fetch(Cycles, memory);
-				Word Address = ((HIGH << 8) | LOW) + X;
-				Cycles--;
-				A = Read(Cycles, Address, memory);
+				LoadAbsoluteX(A, Cycles, memory);
 				setLDAFlags();
 			} break;
 			case INS_LDA_ABY:
 			{
-				Byte LOW = Fetch(Cycles, memory);
-				Byte HIGH = Fetch(Cycles, memory);
-				Word Address = ((HIGH << 8) | LOW) + Y;
-				Cycles--;
-				A = Read(Cycles, Address, memory);
+				LoadAbsoluteY(A, Cycles, memory);
 				setLDAFlags();
 			} break;
 			case INS_LDA_INDX:
@@ -202,6 +268,60 @@ struct CPU
 				A = Read(Cycles, Address, memory);
 				setLDAFlags();
 			} break; 
+
+			/* Load X Register*/
+			case INS_LDX_IM:
+			{
+				LoadImmediate(X, Cycles, memory);
+				setLDXFlags();
+			} break;
+			case INS_LDX_ZP:
+			{
+				LoadZeroPage(X, Cycles, memory);
+				setLDXFlags();
+			} break;
+			case INS_LDX_ZPY:
+			{
+				LoadZeroPageY(X, Cycles, memory);
+				setLDXFlags();
+			} break;
+			case INS_LDX_AB:
+			{
+				LoadAbsolute(X, Cycles, memory);
+				setLDXFlags();
+			} break;
+			case INS_LDX_ABY:
+			{
+				LoadAbsoluteY(X, Cycles, memory);
+				setLDXFlags();
+			} break;
+
+			/*LOAD Y REG*/
+			case INS_LDY_IM:
+			{
+				LoadImmediate(Y, Cycles, memory);
+				setLDYFlags();
+			} break;
+			case INS_LDY_ZP:
+			{
+				LoadZeroPage(Y, Cycles, memory);
+				setLDYFlags();
+			} break;
+			case INS_LDY_ZPY:
+			{
+				LoadZeroPageY(Y, Cycles, memory);
+				setLDYFlags();
+			} break;
+			case INS_LDY_AB:
+			{
+				LoadAbsolute(Y, Cycles, memory);
+				setLDYFlags();
+			} break;
+			case INS_LDY_ABY:
+			{
+				LoadAbsoluteY(Y, Cycles, memory);
+				setLDYFlags();
+			} break;
 			/*NO OP*/
 			case INS_NOP:
 			{
